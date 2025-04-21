@@ -22,6 +22,7 @@ use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
+use crate::syscall::{SYSCALL_EXIT, SYSCALL_GET_TIME, SYSCALL_TRACE, SYSCALL_WRITE, SYSCALL_YIELD};
 
 /// The task manager, where all the tasks are managed.
 ///
@@ -44,6 +45,11 @@ pub struct TaskManagerInner {
     /// task list
     tasks: [TaskControlBlock; MAX_APP_NUM],
     /// id of current `Running` task
+    syscall_write_counter: [usize; MAX_APP_NUM],
+    syscall_exit_counter: [usize; MAX_APP_NUM],
+    syscall_yield_counter: [usize; MAX_APP_NUM],
+    syscall_get_time_counter: [usize; MAX_APP_NUM],
+    syscall_trace_counter: [usize; MAX_APP_NUM],
     current_task: usize,
 }
 
@@ -64,6 +70,11 @@ lazy_static! {
             inner: unsafe {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
+                    syscall_write_counter: [0; MAX_APP_NUM],
+                    syscall_exit_counter: [0; MAX_APP_NUM],
+                    syscall_yield_counter: [0; MAX_APP_NUM],
+                    syscall_get_time_counter: [0; MAX_APP_NUM],
+                    syscall_trace_counter: [0; MAX_APP_NUM],
                     current_task: 0,
                 })
             },
@@ -135,6 +146,32 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    fn add_syscall_counter(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        match syscall_id {
+            SYSCALL_WRITE => inner.syscall_write_counter[current] += 1,
+            SYSCALL_EXIT => inner.syscall_exit_counter[current] += 1,
+            SYSCALL_YIELD => inner.syscall_yield_counter[current] += 1,
+            SYSCALL_GET_TIME => inner.syscall_get_time_counter[current] += 1,
+            SYSCALL_TRACE => inner.syscall_trace_counter[current] += 1,
+            _ => panic!("Unsupported syscall_id: {}", syscall_id),
+        }
+    }
+
+    fn get_syscall_counter(&self, syscall_id: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        match syscall_id {
+            SYSCALL_WRITE => inner.syscall_write_counter[current],
+            SYSCALL_EXIT => inner.syscall_exit_counter[current],
+            SYSCALL_YIELD => inner.syscall_yield_counter[current],
+            SYSCALL_GET_TIME => inner.syscall_get_time_counter[current],
+            SYSCALL_TRACE => inner.syscall_trace_counter[current],
+            _ => panic!("Unsupported syscall_id: {}", syscall_id),
+        }
+    }
 }
 
 /// Run the first task in task list.
@@ -168,4 +205,14 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Add the current 'Running' task's syscall counter by syscall_id.
+pub fn add_syscall_counter(syscall_id: usize) {
+    TASK_MANAGER.add_syscall_counter(syscall_id);
+}
+
+/// Get the current 'Running' task's syscall counter by syscall_id.
+pub fn get_syscall_counter(syscall_id: usize) -> isize {
+    TASK_MANAGER.get_syscall_counter(syscall_id).try_into().unwrap()
 }
