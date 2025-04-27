@@ -262,6 +262,40 @@ impl MemorySet {
             false
         }
     }
+
+    /// find target area by start_va, then insert it to areas
+    pub fn find_area_insert(&mut self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> bool {
+        if let Some(_area) = self.areas.iter().find(|area| {
+            debug!("=============== insert ===============");
+            debug!("area start: {}, end: {}", area.vpn_range.get_start().0, area.vpn_range.get_end().0);
+            debug!("target area start: {}, end: {}", start_va.floor().0, end_va.ceil().0);
+            debug!("======================================");
+            area.vpn_range.get_start() < end_va.ceil() && area.vpn_range.get_end() > start_va.floor()
+        }) {
+            debug!("!!! find area has been used !!!");
+            false
+        } else {
+            debug!("!!! area not be used, insert it!!!");
+            self.insert_framed_area(start_va, end_va, permission);
+            true
+        }
+    }
+    /// find target area by start_va, then remove it from areas
+    pub fn find_area_remove(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        if let Some(index) = self.areas.iter().position(|area| {
+            debug!("=============== remove ===============");
+            debug!("area start: {}, end: {}", area.vpn_range.get_start().0, area.vpn_range.get_end().0);
+            debug!("target area start: {}, end: {}", start_va.floor().0, end_va.ceil().0);
+            debug!("======================================");
+            area.vpn_range.get_start() == start_va.floor() && area.vpn_range.get_end() == end_va.ceil()
+        }) {
+            self.areas[index].unmap(&mut self.page_table);
+            self.areas.remove(index);
+            true
+        } else {
+            false
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

@@ -15,6 +15,7 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{VirtAddr, MapPermission};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -131,6 +132,32 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let cur = inner.current_task;
         inner.tasks[cur].change_program_brk(size)
+    }
+
+    /// add syscall counter by syscall_id
+    pub fn add_syscall_counter(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].add_syscall_counter(syscall_id);
+    }
+
+    /// get syscall counter by syscall_id
+    pub fn get_syscall_counter(&self, syscall_id: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].get_syscall_counter(syscall_id)
+    }
+
+    /// find area of memory to insert, return false if not found
+    pub fn find_area_insert(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> bool {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].find_area_insert(start_va, end_va, permission)
+    }
+    /// find area of memory to remove, return false if not found
+    pub fn find_area_remove(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].find_area_remove(start_va, end_va)
     }
 
     /// Switch current `Running` task to the task we have found,

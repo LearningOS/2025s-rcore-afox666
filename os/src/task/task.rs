@@ -1,8 +1,8 @@
 //! Types related to task management
 use super::TaskContext;
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
 use crate::mm::{
-    kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE,
+    kernel_stack_position, MemorySet, MapPermission, PhysPageNum, VirtAddr, KERNEL_SPACE,
 };
 use crate::trap::{trap_handler, TrapContext};
 
@@ -28,6 +28,9 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+
+    /// Syscall counter
+    pub syscall_counter: [usize; MAX_SYSCALL_NUM]
 }
 
 impl TaskControlBlock {
@@ -63,6 +66,7 @@ impl TaskControlBlock {
             base_size: user_sp,
             heap_bottom: user_sp,
             program_brk: user_sp,
+            syscall_counter: [0; MAX_SYSCALL_NUM]
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -95,6 +99,22 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+    /// add syscall counter by syscall_id
+    pub fn add_syscall_counter(&mut self, syscall_id: usize) {
+        self.syscall_counter[syscall_id] += 1;
+    }
+    /// get syscall counter by syscall_id
+    pub fn get_syscall_counter(&self, syscall_id: usize) -> usize {
+        self.syscall_counter[syscall_id]
+    }
+    /// find area of memory set to insert
+    pub fn find_area_insert(&mut self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> bool {
+        self.memory_set.find_area_insert(start_va, end_va, permission)
+    }
+    /// find area of memory set to remove
+    pub fn find_area_remove(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        self.memory_set.find_area_remove(start_va, end_va)
     }
 }
 
