@@ -8,13 +8,21 @@ use bitflags::*;
 bitflags! {
     /// page table entry flags
     pub struct PTEFlags: u8 {
+        /// Valid
         const V = 1 << 0;
+        /// Readable
         const R = 1 << 1;
+        /// Writable
         const W = 1 << 2;
+        /// eXecutable
         const X = 1 << 3;
+        /// User
         const U = 1 << 4;
+        /// Global
         const G = 1 << 5;
+        /// Accessed
         const A = 1 << 6;
+        /// Dirty
         const D = 1 << 7;
     }
 }
@@ -217,6 +225,19 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .translate_va(VirtAddr::from(va))
         .unwrap()
         .get_mut()
+}
+
+/// translate a ptr and return its mut
+pub fn translated_physaddr(token: usize, ptr: *const u8) -> PhysAddr {
+    let page_table = PageTable::from_token(token);
+    let va = VirtAddr::from(ptr as usize);
+    let vpn = va.floor();
+    let ppn: PhysPageNum = page_table.translate(vpn).unwrap().ppn();
+    let pa: PhysAddr = ppn.into();
+
+    let offset = va.page_offset();
+    let pa_offset = (pa.0 + offset).into();
+    return pa_offset;
 }
 
 /// An abstraction over a buffer passed from user space to kernel space

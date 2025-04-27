@@ -1,9 +1,9 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::config::{BIG_STRIDE, TRAP_CONTEXT_BASE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -71,6 +71,12 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// Stride
+    pub stride: u8,
+
+    /// Priority
+    pub priority: usize
 }
 
 impl TaskControlBlockInner {
@@ -135,6 +141,8 @@ impl TaskControlBlock {
                     ],
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    stride: 0,
+                    priority: 16
                 })
             },
         };
@@ -216,6 +224,8 @@ impl TaskControlBlock {
                     fd_table: new_fd_table,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    stride: parent_inner.stride,
+                    priority: parent_inner.priority
                 })
             },
         });
@@ -229,6 +239,14 @@ impl TaskControlBlock {
         task_control_block
         // **** release child PCB
         // ---- release parent PCB
+    }
+
+    /// parent process spawn child process
+    pub fn spawn(self: &Arc<Self>, elf_data: &[u8]) -> Arc<Self> {
+        let new_tcb = Arc::new(TaskControlBlock::new(elf_data));
+        new_tcb.inner_exclusive_access().parent = Some(Arc::downgrade(self));
+        self.inner_exclusive_access().children.push(new_tcb.clone());
+        new_tcb
     }
 
     /// get pid of process
@@ -260,6 +278,26 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+    /// find area of memory set to insert
+    pub fn find_area_insert(&self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> bool {
+        self.inner_exclusive_access().memory_set.find_area_insert(start_va, end_va, permission)
+    }
+    /// find area of memory set to remove
+    pub fn find_area_remove(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        self.inner_exclusive_access().memory_set.find_area_remove(start_va, end_va)
+    }
+
+    /// Set priority
+    pub fn set_priority(&self, prio: usize) {
+        self.inner_exclusive_access().priority = prio;
+    }
+
+    /// Update stride
+    pub fn update_stride(&self) {
+        let mut inner = self.inner_exclusive_access();
+        let pass = BIG_STRIDE / inner.priority;
+        inner.stride += pass as u8;
     }
 }
 
