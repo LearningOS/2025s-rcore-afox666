@@ -1,12 +1,13 @@
 //!Implementation of [`TaskManager`]
 use super::TaskControlBlock;
+use crate::config::BIG_STRIDE;
 use crate::sync::UPSafeCell;
-use alloc::collections::VecDeque;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use lazy_static::*;
 ///A array of `TaskControlBlock` that is thread-safe
 pub struct TaskManager {
-    ready_queue: VecDeque<Arc<TaskControlBlock>>,
+    ready_queue: Vec<Arc<TaskControlBlock>>,
 }
 
 /// A simple FIFO scheduler.
@@ -14,16 +15,27 @@ impl TaskManager {
     ///Creat an empty TaskManager
     pub fn new() -> Self {
         Self {
-            ready_queue: VecDeque::new(),
+            ready_queue: Vec::new(),
         }
     }
     /// Add process back to ready queue
     pub fn add(&mut self, task: Arc<TaskControlBlock>) {
-        self.ready_queue.push_back(task);
+        self.ready_queue.push(task);
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.ready_queue.pop_front()
+        let mut min_stride_idx = 0;
+        let mut min_stride = BIG_STRIDE;
+        for (idx, task) in self.ready_queue.iter().enumerate() {
+            let stride = task.inner_exclusive_access().stride as usize;
+            if stride < min_stride {
+                min_stride_idx = idx;
+                min_stride = stride;
+            }
+        }
+        let ret = self.ready_queue[min_stride_idx].clone();
+        self.ready_queue.remove(min_stride_idx);
+        return Some(ret);
     }
 }
 
